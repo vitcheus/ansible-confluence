@@ -26,7 +26,7 @@ Available variables are be listed below, along with default values. See [default
 You can change all variables by group_vars or host_vars
 
 | Variable name | Required* | Description | Default Value |
-| --- | --- | --- | --- |
+| :---: | :---: | :---: | :---: |
 | `confluence_version` | **Yes** | Version of the installing confluence software | 7.4.1 | 
 | `confluence_manage_user` | **No** | Should this role manage the confluence user? | true | 
 | `confluence_user` | **No** | OS user name | confluence | 
@@ -39,6 +39,8 @@ You can change all variables by group_vars or host_vars
 
 If you want use reverse proxy for confluence you must set additional setting
 
+| Variable name | Required* | Description | Default Value |
+| :---: | :---: | :---: | :---: |
 | `confluence_catalina_connector_proxyname` | **No** | log driver for kanboard | "" |
 | `confluence_catalina_connector_scheme` | **No** | used protocol | http |
 | `confluence_catalina_connector_proxyport` | **No** | used proxy port | depends on scheme(80 or 443) |
