@@ -1,0 +1,266 @@
+- name: "Include OS-specific variables"
+  include_vars: "{{ lookup('first_found', params) }}"
+  vars:
+    params:
+      files:
+        - "{{ ansible_os_family }}{{ ansible_distribution_major_version }}.yml"
+        - "{{ ansible_os_family }}.yml"
+        - "main.yaml"
+      paths:
+        - vars
+  tags:
+    - confluence
+
+- name: "Manage user confluence"
+  block:
+    - name: "Creating confluence user group"
+      group:
+        name: "{{ confluence_group }}"
+#        system: true
+
+    - name: "Creating confluence user"
+      user:
+        name: "{{ confluence_user }}"
+        group: "{{ confluence_group }}"
+#        system: yes
+        shell: "/bin/bash"
+        comment: "Account for running Confluence"
+        createhome: yes
+        state: present
+
+  when: confluence_manage_user | bool
+  tags:
+    - confluence
+
+- name: "Check existing Confluence installation"
+  command: command -v {{ confluence_bin_path }}/bin/version.sh
+#  environment:
+#    PATH: "{{ confluence_bin_path }}/bin:{{ ansible_env.PATH }}"
+  register: confluence_installation
+  changed_when: false
+  ignore_errors: true
+  check_mode: false
+  tags:
+    - confluence
+
+- name: "Get installed Confluence version"
+  shell: |
+    set -o pipefail
+    find {{ confluence_bin_path }}/confluence/ -type f -name pom.properties | xargs grep -h version | cut -d'=' -f2
+  args:
+    executable: /bin/bash
+  register: installed_confluence_version
+  changed_when: false
+  check_mode: false
+  when: not confluence_installation is failed
+  tags:
+    - confluence
+
+- name: "Compute if installation/backup is required"
+  set_fact:
+    confluence_installation_required: "{{ confluence_installation is failed or installed_confluence_version.stdout != confluence_version }}"
+    confluence_backup_required: "{{ not confluence_installation is failed and installed_confluence_version.stdout != confluence_version }}"
+  tags:
+    - confluence
+
+- name: "Ensure all directories exists"
+  file:
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+    state: "{{ item.state | default('directory') }}"
+  loop:
+    - { dest: "{{ confluence_download.dest | dirname }}" }
+#    - { dest: "{{ mysql_jdbc_download.dest | dirname }}" }
+    - { dest: "{{ postgresql_jdbc_download.dest | dirname }}" }
+    - { dest: "{{ confluence_bin_path | dirname }}" }
+    - { dest: "{{ confluence_data_path | dirname }}" }
+    - dest: "{{ confluence_bin_path }}"
+      owner: "{{ confluence_user }}"
+      group: "{{ confluence_group }}"
+    - dest: "{{ confluence_data_path }}"
+      owner: "{{ confluence_user }}"
+      group: "{{ confluence_group }}"
+  tags:
+    - confluence
+
+- name: "Install Confluence software"
+  block:
+    - name: "Install prerequisites package"
+      package:
+        name: "{{ confluence_os_packages_prerequisites }}"
+        state: "latest"
+        update_cache: yes
+      register: result
+      until: result is succeeded
+
+    - name: "Download confluence archive"
+    #  vars:
+    #    ansible_python_interpreter: "python3"
+      get_url:
+        url: "{{ item.url }}"
+        dest: "{{ item.dest }}"
+        checksum: "{{ item.checksum }}"
+        timeout: 300
+      loop:
+        - "{{ confluence_download }}"
+#        - "{{ mysql_jdbc_download }}"
+#        - "{{ postgresql_jdbc_download }}"
+      register: get_url_result
+      until: get_url_result is succeeded
+
+    - name: "Backup existing confluence software"
+      archive:
+        path: "{{ confluence_bin_path }}/*"
+        dest: "/tmp/confluence_{{ installed_confluence_version.stdout }}.tgz"
+        remove: yes
+      when: confluence_backup_required | bool
+
+    - name: "Install Confluence software"
+      unarchive:
+        remote_src: true
+        src: "{{ confluence_download.dest }}"
+        dest: "{{ confluence_bin_path }}"
+        owner: "{{ confluence_user }}"
+        group: "{{ confluence_group }}"
+        extra_opts: ['--strip-components=1']
+        mode: '0755'
+
+  when: confluence_installation_required | bool
+  tags:
+    - confluence
+
+# TODO need more thinking about db driver check
+#- name: "Get installed postgres driver version"
+#  shell: |
+#    set -o pipefail
+#    find {{ confluence_bin_path }}/confluence/WEB-INF/lib -type f -name *postgresql*.jar | xargs basename -s .jar | cut -d'-' -f2
+#  args:
+#    executable: /bin/bash
+#  register: installed_confluence_pgsql_driver_version
+#  changed_when: false
+#  check_mode: false
+#  when: not confluence_installation is failed
+#  tags:
+#    - confluence
+#
+#- name: "Get installed mysql driver version"
+#  shell: |
+#    set -o pipefail
+#    find {{ confluence_bin_path }}/confluence/WEB-INF/lib -type f -name *mysql*.jar | xargs basename -s .jar | cut -d'-' -f4
+#  args:
+#    executable: /bin/bash
+#  register: installed_confluence_mysql_driver_version
+#  changed_when: false
+#  check_mode: false
+#  when:
+#    - not confluence_installation is failed
+#    - confluence_database_type | default("postgres") | lower == "mysql"
+#  tags:
+#    - confluence
+#
+#- name: "Compute if installation db driver is required"
+#  set_fact:
+#    confluence_installation_mysql_driverr_required: "{{ confluence_database_type | default("postgres") | lower == "mysql" and installed_confluence_mysql_driver_version.stdout != _mysql_jdbc_download[mysql_jdbc_version] }}"
+#    confluence_installation_postgres_driverr_required: "{{ not confluence_installation is failed and installed_confluence_pgsql_driver_version.stdout != _postgresql_jdbc_download[postgresql_jdbc_version] }}"
+#  tags:
+#    - confluence
+
+- name: "Fetch latest DB drivers"
+#  vars:
+#    ansible_python_interpreter: "python3"
+  get_url:
+    url: "{{ item.url }}"
+    dest: "{{ item.dest }}"
+    checksum: "{{ item.checksum }}"
+    timeout: 300
+  loop:
+    - "{{ mysql_jdbc_download }}"
+    - "{{ postgresql_jdbc_download }}"
+  register: get_db_driver_result
+  until: get_db_driver_result is succeeded
+  tags:
+    - confluence
+
+- name: "Extract DB drivers"
+  shell: |
+    set -o pipefail
+    cd {{ confluence_bin_path }}/confluence/WEB-INF/lib
+    rm -rf *postgresql*.jar
+    cp {{ postgresql_jdbc_download.dest }} .
+#    chmod 0755 {{ postgresql_jdbc_download.dest }}
+    cd {{ confluence_bin_path }}/confluence/WEB-INF/lib
+    rm -rf *mysql*.jar
+    TMP_DIR="$(mktemp -d)" \
+      && tar -zx -C $TMP_DIR -f {{ mysql_jdbc_download.dest }} \
+      && mv $TMP_DIR/*/*mysql*-bin.jar . \
+      && chown -Rf {{ confluence_user }}:{{ confluence_group }} {{ confluence_bin_path }}/confluence/WEB-INF/lib \
+#      && chmod 0755 \
+#      {{ confluence_bin_path }}/confluence/WEB-INF/lib \
+      && rm -rf $TMP_DIR
+  args:
+    executable: "/bin/bash"
+  when: get_db_driver_result is changed
+  notify:
+    - confluence | systemctl daemon-reload
+    - confluence | systemctl restart
+  tags:
+    - confluence
+
+- name: "Applying confluence setting"
+  template:
+    dest: "{{ item.dest }}"
+    src: "{{ item.src }}"
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0644') }}"
+  loop:
+    - dest: "/etc/systemd/system/confluence.service"
+      src: confluence.service.j2
+    - dest: "{{ confluence_bin_path }}/bin/setenv.sh"
+      src: "setenv.sh.j2"
+      owner: "{{ confluence_user }}"
+      group: "{{ confluence_group }}"
+      mode: "0755"
+    - dest: "{{ confluence_bin_path }}/conf/server.xml"
+      src: "server.xml.j2"
+      owner: "{{ confluence_user }}"
+      group: "{{ confluence_group }}"
+  notify:
+    - confluence | systemctl daemon-reload
+    - confluence | systemctl restart
+  tags:
+    - confluence
+
+- name: "Set confluence data path"
+  lineinfile:
+    path: "{{ confluence_bin_path }}//confluence/WEB-INF/classes/confluence-init.properties"
+    regexp: "^#? ?confluence.home=.*$"
+    line: "confluence.home={{ confluence_data_path }}"
+    state: present
+  tags:
+    - confluence
+
+- name: "Set confluence timeout setting"
+  lineinfile:
+    path: "{{ confluence_bin_path }}/confluence/WEB-INF/web.xml"
+    regexp: '^(.*<session-timeout>).*(</session-timeout>)'
+    line: '\g<1>{{ confluence_session_timeout }}\g<2>'
+    state: present
+    backrefs: yes
+  tags:
+
+- name: "Ensure Confluence is running and enabled"
+  service:
+    name: "confluence"
+    state: "started"
+    enabled: true
+#  changed_when: false
+#  ignore_errors: true
+  tags:
+    - confluence
+
+#- name: flush handlers
+#  meta: flush_handlers
+#  tags: confluence

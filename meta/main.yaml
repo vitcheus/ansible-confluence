@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  author: "Ilya Shataev <ilya.shataev@gmail.com>"
+  description: Atlassian conluence software install and configure
+  license: MIT
+  min_ansible_version: 2.7
+  platforms:
+    - name: EL
+      versions:
+        - 7
+        - 8
+  galaxy_tags:
+    - confluence
+    - wiki
+    - atlassian
+    - centos
+    - centos7
+    - rhel
+    - rhel7
+dependencies: []

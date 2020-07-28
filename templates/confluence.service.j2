@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+
+[Unit]
+Description=Atlassian Confluence
+After=syslog.target network.target
+
+[Service]
+Type=forking
+User={{ confluence_user }}
+Group={{ confluence_group }}
+ExecStart={{ confluence_bin_path }}/bin/start-confluence.sh
+ExecStop={{ confluence_bin_path }}/bin/stop-confluence.sh
+PIDFile={{ confluence_bin_path }}/work/catalina.pid
+
+TimeoutSec=200
+LimitNOFILE=4096
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
