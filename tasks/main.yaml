@@ -105,8 +105,8 @@
         timeout: 300
       loop:
         - "{{ confluence_download }}"
-#        - "{{ mysql_jdbc_download }}"
-#        - "{{ postgresql_jdbc_download }}"
+        - "{{ mysql_jdbc_download }}"
+        - "{{ postgresql_jdbc_download }}"
       register: get_url_result
       until: get_url_result is succeeded
 
@@ -189,15 +189,14 @@
     cd {{ confluence_bin_path }}/confluence/WEB-INF/lib
     rm -rf *postgresql*.jar
     cp {{ postgresql_jdbc_download.dest }} .
-#    chmod 0755 {{ postgresql_jdbc_download.dest }}
     cd {{ confluence_bin_path }}/confluence/WEB-INF/lib
     rm -rf *mysql*.jar
     TMP_DIR="$(mktemp -d)" \
       && tar -zx -C $TMP_DIR -f {{ mysql_jdbc_download.dest }} \
       && mv $TMP_DIR/*/*mysql*-bin.jar . \
       && chown -Rf {{ confluence_user }}:{{ confluence_group }} {{ confluence_bin_path }}/confluence/WEB-INF/lib \
-#      && chmod 0755 \
-#      {{ confluence_bin_path }}/confluence/WEB-INF/lib \
+      && chmod 0755 --recursive \
+      {{ confluence_bin_path }}/confluence/WEB-INF/lib \
       && rm -rf $TMP_DIR
   args:
     executable: "/bin/bash"
