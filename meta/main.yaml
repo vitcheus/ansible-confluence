@@ -1,8 +1,8 @@
 ---
 galaxy_info:
-  role_name: conluence
+  role_name: confluence
   author: "Ilya Shataev <ilya.shataev@gmail.com>"
-  description: Atlassian conluence software install and configure
+  description: Atlassian confluence software install and configure
   license: MIT
   min_ansible_version: 2.7
   platforms:
