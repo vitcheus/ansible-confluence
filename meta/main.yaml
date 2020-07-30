@@ -1,5 +1,6 @@
 ---
 galaxy_info:
+  role_name: conluence
   author: "Ilya Shataev <ilya.shataev@gmail.com>"
   description: Atlassian conluence software install and configure
   license: MIT

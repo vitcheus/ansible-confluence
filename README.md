@@ -62,7 +62,7 @@ Example Playbook
   become: yes
   become_method: sudo
   roles:
-    - ansible-confuence
+    - vitcheus.confluence
   vars:
     confuence_version: "7.5.2"
     confuence_manage_user: true
